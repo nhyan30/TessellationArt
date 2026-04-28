@@ -11,10 +11,7 @@ public class BoardManager : MonoBehaviour
 
     void Start()
     {
-        LineRendererDrawer.DrawBoardOutline(
-            transform,
-            lineMaterial
-        );
+        LineRendererDrawer.DrawBoardOutline(transform, lineMaterial);
     }
 
     void Update()
@@ -32,12 +29,14 @@ public class BoardManager : MonoBehaviour
 
     void AddPoint(Vector3 newPoint)
     {
+        // Prevent clicking too close to existing points (avoids broken triangles)
+        foreach (var p in points)
+        {
+            if (Vector3.Distance(p, newPoint) < 0.5f) return;
+        }
+
         points.Add(newPoint);
-
-        // Rebuild triangulation
         triangles = Triangulation.Generate(points, transform);
-
-        // Draw
-        LineRendererDrawer.Draw(triangles,lineMaterial,transform);
+        LineRendererDrawer.Draw(triangles, lineMaterial, transform);
     }
 }
