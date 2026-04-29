@@ -54,7 +54,7 @@ public static class Triangulation
         List<Vector2> points2D = new List<Vector2>();
         List<Vector3> points3D = new List<Vector3>();
 
-        // 1. Add 16 boundary points
+        // 1. Add 8 boundary points
         Vector3[] boundary = GetBoundaryPoints(board);
         foreach (var p in boundary)
         {
@@ -63,7 +63,7 @@ public static class Triangulation
             points3D.Add(p);
         }
 
-        // 2. Add super triangle dummy points (indices 16, 17, 18)
+        // 2. Add super triangle dummy points (indices 8, 9, 10)
         points2D.Add(new Vector2(-100, -100));
         points2D.Add(new Vector2(100, -100));
         points2D.Add(new Vector2(0, 100));
@@ -71,7 +71,7 @@ public static class Triangulation
         points3D.Add(Vector3.zero);
         points3D.Add(Vector3.zero);
 
-        // 3. Add user clicked points (starting from index 19)
+        // 3. Add user clicked points (starting from index 11)
         foreach (var p in points)
         {
             Vector3 local = board.InverseTransformPoint(p);
@@ -91,9 +91,9 @@ public static class Triangulation
             int c = indices[i + 2];
 
             // Ignore any triangles that use the super triangle dummy points
-            if (a >= 16 && a <= 18) continue;
-            if (b >= 16 && b <= 18) continue;
-            if (c >= 16 && c <= 18) continue;
+            if (a >= 8 && a <= 10) continue;
+            if (b >= 8 && b <= 10) continue;
+            if (c >= 8 && c <= 10) continue;
 
             tris.Add(new Triangle(points3D[a], points3D[b], points3D[c]));
         }
@@ -107,22 +107,22 @@ public static class Triangulation
 
         List<Tri2D> triangles = new List<Tri2D>();
 
-        // Add super triangle (indices 16, 17, 18)
-        triangles.Add(new Tri2D(16, 17, 18, points));
+        // Add super triangle (indices 8, 9, 10)
+        triangles.Add(new Tri2D(8, 9, 10, points));
 
-        // Delaunay triangulate the 16 boundary points
-        for (int pIdx = 0; pIdx < 16; pIdx++)
+        // Delaunay triangulate the 8 boundary points
+        for (int pIdx = 0; pIdx < 8; pIdx++)
         {
             InsertPointDelaunay(pIdx, triangles, points);
         }
 
         // Remove super triangle
-        triangles.RemoveAll(t => t.A >= 16 || t.B >= 16 || t.C >= 16);
+        triangles.RemoveAll(t => t.A >= 8 || t.B >= 8 || t.C >= 8);
 
-        // Insert user clicked points (indices 19 to count-1) using Hexagonal Hole
-        for (int pIdx = 19; pIdx < points.Count; pIdx++)
+        // Insert user clicked points (indices 11 to count-1) using Standard Delaunay
+        for (int pIdx = 11; pIdx < points.Count; pIdx++)
         {
-            InsertPoint(pIdx, triangles, points);
+            InsertPointDelaunay(pIdx, triangles, points);
         }
 
         // Extract indices
@@ -137,94 +137,7 @@ public static class Triangulation
         return indices;
     }
 
-    // Forces exactly 6 connections for internal hits by removing a hexagonal hole
-    static void InsertPoint(int pIdx, List<Tri2D> triangles, List<Vector2> points)
-    {
-        Vector2 p = points[pIdx];
-        Tri2D? centerTri = null;
-
-        // Find the triangle containing the point
-        foreach (var t in triangles)
-        {
-            if (PointInsideTriangle(p, t, points))
-            {
-                centerTri = t;
-                break;
-            }
-        }
-
-        if (centerTri == null)
-        {
-            // Fallback to Delaunay if we missed (e.g., exactly on edge or numerical precision)
-            InsertPointDelaunay(pIdx, triangles, points);
-            return;
-        }
-
-        Tri2D T0 = centerTri.Value;
-
-        // Find neighbors of T0
-        List<Tri2D> neighbors = new List<Tri2D>();
-        Edge[] edgesT0 = {
-            new Edge(T0.A, T0.B),
-            new Edge(T0.B, T0.C),
-            new Edge(T0.C, T0.A)
-        };
-
-        foreach (var t in triangles)
-        {
-            if (IsSameTriangle(t, T0)) continue;
-
-            bool isNeighbor = false;
-            foreach (var e in edgesT0)
-            {
-                if (new Edge(t.A, t.B).Equals(e) ||
-                    new Edge(t.B, t.C).Equals(e) ||
-                    new Edge(t.C, t.A).Equals(e))
-                {
-                    isNeighbor = true;
-                    break;
-                }
-            }
-            if (isNeighbor) neighbors.Add(t);
-        }
-
-        List<Tri2D> toRemove = new List<Tri2D> { T0 };
-        toRemove.AddRange(neighbors);
-
-        List<Edge> polygon = new List<Edge>();
-        foreach (var t in toRemove)
-        {
-            polygon.Add(new Edge(t.A, t.B));
-            polygon.Add(new Edge(t.B, t.C));
-            polygon.Add(new Edge(t.C, t.A));
-        }
-
-        List<Edge> boundary = new List<Edge>();
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            bool shared = false;
-            for (int j = 0; j < polygon.Count; j++)
-            {
-                if (i == j) continue;
-                if (polygon[i].Equals(polygon[j]))
-                {
-                    shared = true;
-                    break;
-                }
-            }
-            if (!shared) boundary.Add(polygon[i]);
-        }
-
-        foreach (var t in toRemove) triangles.Remove(t);
-
-        // Connect the new point to the hexagonal (or polygonal) hole
-        foreach (var e in boundary)
-        {
-            triangles.Add(new Tri2D(e.A, e.B, pIdx, points));
-        }
-    }
-
-    // Standard Delaunay insertion used for the initial boundary generation
+    // Standard Delaunay insertion used for both boundary and user points
     static void InsertPointDelaunay(int pIdx, List<Tri2D> triangles, List<Vector2> points)
     {
         Vector2 p = points[pIdx];
@@ -273,32 +186,6 @@ public static class Triangulation
         }
     }
 
-    static bool PointInsideTriangle(Vector2 p, Tri2D t, List<Vector2> points)
-    {
-        Vector2 v0 = points[t.C] - points[t.A];
-        Vector2 v1 = points[t.B] - points[t.A];
-        Vector2 v2 = p - points[t.A];
-
-        float dot00 = Vector2.Dot(v0, v0);
-        float dot01 = Vector2.Dot(v0, v1);
-        float dot02 = Vector2.Dot(v0, v2);
-        float dot11 = Vector2.Dot(v1, v1);
-        float dot12 = Vector2.Dot(v1, v2);
-
-        float invDenom = 1f / (dot00 * dot11 - dot01 * dot01);
-        float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-        float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-        return (u >= -0.001f) && (v >= -0.001f) && (u + v <= 1.001f); // Small epsilon for edge hits
-    }
-
-    static bool IsSameTriangle(Tri2D a, Tri2D b)
-    {
-        return (a.A == b.A || a.A == b.B || a.A == b.C) &&
-               (a.B == b.A || a.B == b.B || a.B == b.C) &&
-               (a.C == b.A || a.C == b.B || a.C == b.C);
-    }
-
     static Vector3[] GetBoundaryPoints(Transform board)
     {
         float size = 5f;
@@ -313,27 +200,19 @@ public static class Triangulation
 
         // Bottom edge (c0 to c1)
         boundary.Add(c0);
-        boundary.Add(Vector3.Lerp(c0, c1, 0.25f));
         boundary.Add(Vector3.Lerp(c0, c1, 0.5f));
-        boundary.Add(Vector3.Lerp(c0, c1, 0.75f));
 
         // Right edge (c1 to c2)
         boundary.Add(c1);
-        boundary.Add(Vector3.Lerp(c1, c2, 0.25f));
         boundary.Add(Vector3.Lerp(c1, c2, 0.5f));
-        boundary.Add(Vector3.Lerp(c1, c2, 0.75f));
 
         // Top edge (c2 to c3)
         boundary.Add(c2);
-        boundary.Add(Vector3.Lerp(c2, c3, 0.25f));
         boundary.Add(Vector3.Lerp(c2, c3, 0.5f));
-        boundary.Add(Vector3.Lerp(c2, c3, 0.75f));
 
         // Left edge (c3 to c0)
         boundary.Add(c3);
-        boundary.Add(Vector3.Lerp(c3, c0, 0.25f));
         boundary.Add(Vector3.Lerp(c3, c0, 0.5f));
-        boundary.Add(Vector3.Lerp(c3, c0, 0.75f));
 
         return boundary.ToArray();
     }

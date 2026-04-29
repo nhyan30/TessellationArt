@@ -16,7 +16,7 @@ public static class LineRendererDrawer
 
         foreach (var t in tris)
         {
-            DrawExtrudedTriangle(t, mat);
+            DrawExtrudedTriangle(t, mat, board);
         }
     }
 
@@ -24,7 +24,7 @@ public static class LineRendererDrawer
     {
         Vector3[] c = GetBoundaryPoints(board);
 
-        // Draw outline segments connecting all 16 boundary points
+        // Draw outline segments connecting all 8 boundary points
         for (int i = 0; i < c.Length; i++)
         {
             DrawEdge(c[i], c[(i + 1) % c.Length], mat, .1f);
@@ -45,32 +45,24 @@ public static class LineRendererDrawer
 
         // Bottom edge (c0 to c1)
         boundary.Add(c0);
-        boundary.Add(Vector3.Lerp(c0, c1, 0.25f));
         boundary.Add(Vector3.Lerp(c0, c1, 0.5f));
-        boundary.Add(Vector3.Lerp(c0, c1, 0.75f));
 
         // Right edge (c1 to c2)
         boundary.Add(c1);
-        boundary.Add(Vector3.Lerp(c1, c2, 0.25f));
         boundary.Add(Vector3.Lerp(c1, c2, 0.5f));
-        boundary.Add(Vector3.Lerp(c1, c2, 0.75f));
 
         // Top edge (c2 to c3)
         boundary.Add(c2);
-        boundary.Add(Vector3.Lerp(c2, c3, 0.25f));
         boundary.Add(Vector3.Lerp(c2, c3, 0.5f));
-        boundary.Add(Vector3.Lerp(c2, c3, 0.75f));
 
         // Left edge (c3 to c0)
         boundary.Add(c3);
-        boundary.Add(Vector3.Lerp(c3, c0, 0.25f));
         boundary.Add(Vector3.Lerp(c3, c0, 0.5f));
-        boundary.Add(Vector3.Lerp(c3, c0, 0.75f));
 
         return boundary.ToArray();
     }
 
-    static void DrawExtrudedTriangle(Triangle tri, Material mat)
+    static void DrawExtrudedTriangle(Triangle tri, Material mat, Transform board)
     {
         Vector3 center = (tri.a + tri.b + tri.c) / 3f;
 
@@ -84,15 +76,17 @@ public static class LineRendererDrawer
         {
             float d = i * depthStep;
 
-            Vector3 boardCenter = Vector3.zero;
+            Vector3 boardCenter = board.position;
             Vector3 dirToCenter = (boardCenter - center).normalized;
 
-            // Pushes lines inward and slightly down for the folded 3D look
-            Vector3 depthOffset = new Vector3(
-                dirToCenter.x * d * 0.6f,
+            // Calculate depth offset in local space to support board rotation properly
+            Vector3 localDirToCenter = board.InverseTransformDirection(dirToCenter);
+            Vector3 localDepthOffset = new Vector3(
+                localDirToCenter.x * d * 0.6f,
                 -d * 0.15f,
-                d * 0.8f
+                localDirToCenter.z * d * 0.8f // Fixed Z-axis bug here
             );
+            Vector3 depthOffset = board.TransformDirection(localDepthOffset);
 
             float s = 1f - (i * scaleStep);
 
