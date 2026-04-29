@@ -1,10 +1,11 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public struct Edge
 {
     public int A, B;
     public Edge(int a, int b) { A = a; B = b; }
+
     public bool Equals(Edge other)
     {
         return (A == other.A && B == other.B) || (A == other.B && B == other.A);
@@ -49,12 +50,15 @@ public struct Tri2D
 
 public static class Triangulation
 {
+    /// <summary>
+    /// Generates a Delaunay triangulation for a set of points within a board's boundary.
+    /// </summary>
     public static List<Triangle> Generate(List<Vector3> points, Transform board)
     {
         List<Vector2> points2D = new List<Vector2>();
         List<Vector3> points3D = new List<Vector3>();
 
-        // 1. Add 8 boundary points
+        // 1. Add 16 boundary points (indices 0 to 15)
         Vector3[] boundary = GetBoundaryPoints(board);
         foreach (var p in boundary)
         {
@@ -63,15 +67,15 @@ public static class Triangulation
             points3D.Add(p);
         }
 
-        // 2. Add super triangle dummy points (indices 8, 9, 10)
-        points2D.Add(new Vector2(-100, -100));
-        points2D.Add(new Vector2(100, -100));
-        points2D.Add(new Vector2(0, 100));
+        // 2. Add super triangle dummy points (indices 16, 17, 18)
+        points2D.Add(new Vector2(-500, -500));
+        points2D.Add(new Vector2(500, -500));
+        points2D.Add(new Vector2(0, 500));
         points3D.Add(Vector3.zero);
         points3D.Add(Vector3.zero);
         points3D.Add(Vector3.zero);
 
-        // 3. Add user clicked points (starting from index 11)
+        // 3. Add user clicked points (starting from index 19)
         foreach (var p in points)
         {
             Vector3 local = board.InverseTransformPoint(p);
@@ -91,9 +95,9 @@ public static class Triangulation
             int c = indices[i + 2];
 
             // Ignore any triangles that use the super triangle dummy points
-            if (a >= 8 && a <= 10) continue;
-            if (b >= 8 && b <= 10) continue;
-            if (c >= 8 && c <= 10) continue;
+            if (a >= 16 && a <= 18) continue;
+            if (b >= 16 && b <= 18) continue;
+            if (c >= 16 && c <= 18) continue;
 
             tris.Add(new Triangle(points3D[a], points3D[b], points3D[c]));
         }
@@ -101,26 +105,28 @@ public static class Triangulation
         return tris;
     }
 
-    static List<int> DelaunayTriangulate(List<Vector2> points)
+    // --- Internal Geometric Algorithms ---
+
+    private static List<int> DelaunayTriangulate(List<Vector2> points)
     {
         if (points.Count < 3) return new List<int>();
 
         List<Tri2D> triangles = new List<Tri2D>();
 
-        // Add super triangle (indices 8, 9, 10)
-        triangles.Add(new Tri2D(8, 9, 10, points));
+        // Add super triangle (indices 16, 17, 18)
+        triangles.Add(new Tri2D(16, 17, 18, points));
 
-        // Delaunay triangulate the 8 boundary points
-        for (int pIdx = 0; pIdx < 8; pIdx++)
+        // Delaunay triangulate the 16 boundary points
+        for (int pIdx = 0; pIdx < 16; pIdx++)
         {
             InsertPointDelaunay(pIdx, triangles, points);
         }
 
         // Remove super triangle
-        triangles.RemoveAll(t => t.A >= 8 || t.B >= 8 || t.C >= 8);
+        triangles.RemoveAll(t => t.A >= 16 || t.B >= 16 || t.C >= 16);
 
-        // Insert user clicked points (indices 11 to count-1) using Standard Delaunay
-        for (int pIdx = 11; pIdx < points.Count; pIdx++)
+        // Insert user clicked points (indices 19 to count-1) using Standard Delaunay
+        for (int pIdx = 19; pIdx < points.Count; pIdx++)
         {
             InsertPointDelaunay(pIdx, triangles, points);
         }
@@ -137,12 +143,12 @@ public static class Triangulation
         return indices;
     }
 
-    // Standard Delaunay insertion used for both boundary and user points
-    static void InsertPointDelaunay(int pIdx, List<Tri2D> triangles, List<Vector2> points)
+    private static void InsertPointDelaunay(int pIdx, List<Tri2D> triangles, List<Vector2> points)
     {
         Vector2 p = points[pIdx];
         List<Tri2D> badTris = new List<Tri2D>();
 
+        // Find triangles whose circumcircle contains the new point
         foreach (var t in triangles)
         {
             float distSq = (p.x - t.CircumCenter.x) * (p.x - t.CircumCenter.x) +
@@ -154,6 +160,7 @@ public static class Triangulation
             }
         }
 
+        // Find the boundary of the hole created by removing bad triangles
         List<Edge> polygon = new List<Edge>();
         foreach (var t in badTris)
         {
@@ -178,6 +185,7 @@ public static class Triangulation
             if (!shared) boundary.Add(polygon[i]);
         }
 
+        // Remove old triangles and create new ones using the point and boundary edges
         foreach (var t in badTris) triangles.Remove(t);
 
         foreach (var e in boundary)
@@ -186,11 +194,11 @@ public static class Triangulation
         }
     }
 
-    static Vector3[] GetBoundaryPoints(Transform board)
+    private static Vector3[] GetBoundaryPoints(Transform board)
     {
         float size = 5f;
+        int segmentsPerEdge = 4; // 16 total points
 
-        // Corners
         Vector3 c0 = board.TransformPoint(new Vector3(-size, 0, -size));
         Vector3 c1 = board.TransformPoint(new Vector3(size, 0, -size));
         Vector3 c2 = board.TransformPoint(new Vector3(size, 0, size));
@@ -198,21 +206,10 @@ public static class Triangulation
 
         List<Vector3> boundary = new List<Vector3>();
 
-        // Bottom edge (c0 to c1)
-        boundary.Add(c0);
-        boundary.Add(Vector3.Lerp(c0, c1, 0.5f));
-
-        // Right edge (c1 to c2)
-        boundary.Add(c1);
-        boundary.Add(Vector3.Lerp(c1, c2, 0.5f));
-
-        // Top edge (c2 to c3)
-        boundary.Add(c2);
-        boundary.Add(Vector3.Lerp(c2, c3, 0.5f));
-
-        // Left edge (c3 to c0)
-        boundary.Add(c3);
-        boundary.Add(Vector3.Lerp(c3, c0, 0.5f));
+        for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c0, c1, (float)i / segmentsPerEdge));
+        for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c1, c2, (float)i / segmentsPerEdge));
+        for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c2, c3, (float)i / segmentsPerEdge));
+        for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c3, c0, (float)i / segmentsPerEdge));
 
         return boundary.ToArray();
     }
