@@ -120,33 +120,39 @@ public static class Triangulation
     /// If maxBoundaryPoints >= 16 or nearestTo is null, returns all 16.
     /// </summary>
     private static List<Vector3> SelectBoundaryPoints(Vector3[] allBoundary,
-        int maxBoundaryPoints, Vector3? nearestTo)
+    int maxBoundaryPoints, Vector3? nearestTo)
     {
         List<Vector3> result = new List<Vector3>();
 
-        if (maxBoundaryPoints >= 16 || nearestTo == null)
+        // Full boundary fallback
+        if (maxBoundaryPoints >= allBoundary.Length || nearestTo == null)
         {
-            for (int i = 0; i < allBoundary.Length; i++)
-                result.Add(allBoundary[i]);
+            result.AddRange(allBoundary);
             return result;
         }
 
-        // Sort boundary indices by squared distance to the reference point
         Vector3 refPoint = nearestTo.Value;
-        List<int> sortedIndices = new List<int>();
+
+        // Sort indices by distance to click
+        List<int> sorted = new List<int>();
         for (int i = 0; i < allBoundary.Length; i++)
-            sortedIndices.Add(i);
+            sorted.Add(i);
 
-        sortedIndices.Sort((a, b) =>
-            Vector3.SqrMagnitude(allBoundary[a] - refPoint).CompareTo(
-            Vector3.SqrMagnitude(allBoundary[b] - refPoint)));
+        sorted.Sort((a, b) =>
+            Vector3.SqrMagnitude(allBoundary[a] - refPoint)
+            .CompareTo(Vector3.SqrMagnitude(allBoundary[b] - refPoint)));
 
-        // Pick the closest N
-        int count = Mathf.Min(maxBoundaryPoints, sortedIndices.Count);
-        for (int i = 0; i < count; i++)
+        // Safety clamp
+        int count = Mathf.Clamp(maxBoundaryPoints, 2, allBoundary.Length);
+
+        // ✅ ALWAYS: (N - 1) nearest
+        for (int i = 0; i < count - 1; i++)
         {
-            result.Add(allBoundary[sortedIndices[i]]);
+            result.Add(allBoundary[sorted[i]]);
         }
+
+        // ✅ ALWAYS: +1 farthest
+        result.Add(allBoundary[sorted[sorted.Count - 1]]);
 
         return result;
     }
