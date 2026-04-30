@@ -500,7 +500,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cam: {fileID: 330585545}
-  lineMaterial: {fileID: 2100000, guid: ebceddc6898e69d45be90702d146c132, type: 2}
+  lineMaterial: {fileID: 2100000, guid: 13996afa7bb698c4da8726f92e875b01, type: 2}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0

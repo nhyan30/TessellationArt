@@ -1,13 +1,13 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public static class LineRendererDrawer
 {
     static List<GameObject> lines = new List<GameObject>();
 
-    static int depthLayers = 7;
-    static float depthStep = .1f;
-    static float scaleStep = .035f;
+    const int depthLayers = 7;      // Number of repeated depth copies
+    const float depthStep = .08f;  // Vertical spacing between copies
+    const float scaleStep = .025f; // Shrink per layer
 
     public static void Draw(List<Triangle> tris, Material mat, Transform board)
     {
@@ -24,10 +24,24 @@ public static class LineRendererDrawer
     {
         Vector3[] c = GetBoundaryPoints(board);
 
-        // Draw outline segments connecting all 16 boundary points
+        // --- Glow layer (wider, dimmer) ---
         for (int i = 0; i < c.Length; i++)
+            DrawEdge(c[i], c[(i + 1) % c.Length], mat, 0.22f, 0.12f);
+
+        // --- Core outline ---
+        for (int i = 0; i < c.Length; i++)
+            DrawEdge(c[i], c[(i + 1) % c.Length], mat, 0.07f, 1f);
+
+        // --- Outline depth copies ---
+        for (int d = 1; d <= 2; d++)
         {
-            DrawEdge(c[i], c[(i + 1) % c.Length], mat, .1f);
+            float fade = 1f - (float)d / 3f;
+            Vector3 depthOff = board.TransformDirection(new Vector3(0, -d * 0.07f, 0));
+            for (int i = 0; i < c.Length; i++)
+            {
+                DrawEdge(c[i] + depthOff, c[(i + 1) % c.Length] + depthOff,
+                         mat, 0.04f, fade);
+            }
         }
     }
 
@@ -42,12 +56,10 @@ public static class LineRendererDrawer
         Vector3 c3 = board.TransformPoint(new Vector3(-size, 0, size));
 
         List<Vector3> boundary = new List<Vector3>();
-
         for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c0, c1, (float)i / segmentsPerEdge));
         for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c1, c2, (float)i / segmentsPerEdge));
         for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c2, c3, (float)i / segmentsPerEdge));
         for (int i = 0; i < segmentsPerEdge; i++) boundary.Add(Vector3.Lerp(c3, c0, (float)i / segmentsPerEdge));
-
         return boundary.ToArray();
     }
 
@@ -55,54 +67,67 @@ public static class LineRendererDrawer
     {
         Vector3 center = (tri.a + tri.b + tri.c) / 3f;
 
-        // FRONT BRIGHT FACE
-        DrawEdge(tri.a, tri.b, mat, .05f);
-        DrawEdge(tri.b, tri.c, mat, .05f);
-        DrawEdge(tri.c, tri.a, mat, .05f);
+        // ── FRONT FACE (bright + glow) ─────────────────────
+        DrawGlowEdge(tri.a, tri.b, mat, 0.05f);
+        DrawGlowEdge(tri.b, tri.c, mat, 0.05f);
+        DrawGlowEdge(tri.c, tri.a, mat, 0.05f);
 
-        // DEPTH COPIES BEHIND
+        // ── DEPTH COPIES (repeated fading lines) ───────────
+        Vector3 prevA = tri.a, prevB = tri.b, prevC = tri.c;
+
         for (int i = 1; i <= depthLayers; i++)
         {
             float d = i * depthStep;
             float s = 1f - (i * scaleStep);
+            float fade = 1f - (float)i / (depthLayers + 1);   // 0.83 → 0.17
 
-            // Simplified and robust depth offset directly along the board's local downward vector
-            Vector3 localDepthOffset = new Vector3(0, -d, 0);
-            Vector3 depthOffset = board.TransformDirection(localDepthOffset);
+            Vector3 depthOffset = board.TransformDirection(new Vector3(0, -d, 0));
 
             Vector3 A = center + (tri.a - center) * s + depthOffset;
             Vector3 B = center + (tri.b - center) * s + depthOffset;
             Vector3 C = center + (tri.c - center) * s + depthOffset;
 
-            DrawEdge(A, B, mat, .025f);
-            DrawEdge(B, C, mat, .025f);
-            DrawEdge(C, A, mat, .025f);
+            float w = Mathf.Lerp(0.03f, 0.015f, (float)i / depthLayers);
 
-            // Connect layers for tunnel ribs
-            if (i == 1)
-            {
-                DrawEdge(tri.a, A, mat, .018f);
-                DrawEdge(tri.b, B, mat, .018f);
-                DrawEdge(tri.c, C, mat, .018f);
-            }
+            DrawEdge(A, B, mat, w, fade);
+            DrawEdge(B, C, mat, w, fade);
+            DrawEdge(C, A, mat, w, fade);
+
+            // Ribs connecting each pair of adjacent layers
+            DrawEdge(prevA, A, mat, 0.015f, fade * 0.6f);
+            DrawEdge(prevB, B, mat, 0.015f, fade * 0.6f);
+            DrawEdge(prevC, C, mat, 0.015f, fade * 0.6f);
+
+            prevA = A; prevB = B; prevC = C;
         }
     }
 
-    static void DrawEdge(Vector3 a, Vector3 b, Material mat, float width)
+    /// Draws a soft glow + bright core for a front-facing edge
+    static void DrawGlowEdge(Vector3 a, Vector3 b, Material mat, float coreWidth)
+    {
+        DrawEdge(a, b, mat, coreWidth * 4f, 0.08f);   // outer glow
+        DrawEdge(a, b, mat, coreWidth * 2f, 0.25f);   // mid glow
+        DrawEdge(a, b, mat, coreWidth, 1.0f);    // bright core
+    }
+
+    static void DrawEdge(Vector3 a, Vector3 b, Material baseMat, float width, float fade)
     {
         GameObject go = new GameObject("Line");
         LineRenderer lr = go.AddComponent<LineRenderer>();
 
-        lr.material = mat;
+        // Create a material instance so each line can have its own _Fade value
+        Material instance = new Material(baseMat);
+        instance.SetFloat("_Fade", fade);
+
+        lr.material = instance;
         lr.startWidth = width;
         lr.endWidth = width;
         lr.positionCount = 2;
         lr.useWorldSpace = true;
-
-        lr.SetPosition(0, a + Vector3.up * .02f);
-        lr.SetPosition(1, b + Vector3.up * .02f);
-
         lr.numCapVertices = 8;
+
+        lr.SetPosition(0, a + Vector3.up * 0.02f);
+        lr.SetPosition(1, b + Vector3.up * 0.02f);
 
         lines.Add(go);
     }
@@ -111,7 +136,7 @@ public static class LineRendererDrawer
     {
         foreach (var l in lines)
             if (l != null)
-                GameObject.Destroy(l);
+                Object.Destroy(l);
 
         lines.Clear();
     }
