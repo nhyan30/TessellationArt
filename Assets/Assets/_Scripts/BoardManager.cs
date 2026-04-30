@@ -40,7 +40,7 @@ public class BoardManager : MonoBehaviour
         if (points.Count == 1)
         {
             // FIRST HIT: connect only to the 6 nearest boundary anchors
-            triangles = Triangulation.Generate(points, transform, 8, points[0]);
+            triangles = Triangulation.Generate(points, transform, 9, points[0]);
         }
         else
         {
