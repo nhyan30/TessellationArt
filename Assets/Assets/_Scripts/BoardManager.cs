@@ -36,7 +36,18 @@ public class BoardManager : MonoBehaviour
         }
 
         points.Add(newPoint);
-        triangles = Triangulation.Generate(points, transform);
+
+        if (points.Count == 1)
+        {
+            // FIRST HIT: connect only to the 6 nearest boundary anchors
+            triangles = Triangulation.Generate(points, transform, 8, points[0]);
+        }
+        else
+        {
+            // SECOND HIT onwards: connect to all 16 boundary anchors
+            triangles = Triangulation.Generate(points, transform, 16, null);
+        }
+
         LineRendererDrawer.Draw(triangles, lineMaterial, transform);
     }
 }

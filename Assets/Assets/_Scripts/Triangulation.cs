@@ -52,22 +52,32 @@ public static class Triangulation
 {
     /// <summary>
     /// Generates a Delaunay triangulation for a set of points within a board's boundary.
+    /// maxBoundaryPoints: how many of the 16 boundary anchors to include.
+    /// nearestTo: when maxBoundaryPoints < 16, selects the closest boundary points to this position.
     /// </summary>
-    public static List<Triangle> Generate(List<Vector3> points, Transform board)
+    public static List<Triangle> Generate(List<Vector3> points, Transform board,
+        int maxBoundaryPoints = 16, Vector3? nearestTo = null)
     {
         List<Vector2> points2D = new List<Vector2>();
         List<Vector3> points3D = new List<Vector3>();
 
-        // 1. Add 16 boundary points (indices 0 to 15)
-        Vector3[] boundary = GetBoundaryPoints(board);
-        foreach (var p in boundary)
+        // 1. Get all 16 boundary points
+        Vector3[] allBoundary = GetBoundaryPoints(board);
+
+        // 2. Select which boundary points to use
+        List<Vector3> selectedBoundary = SelectBoundaryPoints(allBoundary, maxBoundaryPoints, nearestTo);
+        int boundaryCount = selectedBoundary.Count;
+
+        // Add selected boundary points (indices 0 to boundaryCount-1)
+        foreach (var p in selectedBoundary)
         {
             Vector3 local = board.InverseTransformPoint(p);
             points2D.Add(new Vector2(local.x, local.z));
             points3D.Add(p);
         }
 
-        // 2. Add super triangle dummy points (indices 16, 17, 18)
+        // 3. Add super triangle dummy points (indices boundaryCount .. boundaryCount+2)
+        int superStart = boundaryCount;
         points2D.Add(new Vector2(-500, -500));
         points2D.Add(new Vector2(500, -500));
         points2D.Add(new Vector2(0, 500));
@@ -75,7 +85,8 @@ public static class Triangulation
         points3D.Add(Vector3.zero);
         points3D.Add(Vector3.zero);
 
-        // 3. Add user clicked points (starting from index 19)
+        // 4. Add user clicked points (starting from index boundaryCount+3)
+        int userStart = boundaryCount + 3;
         foreach (var p in points)
         {
             Vector3 local = board.InverseTransformPoint(p);
@@ -83,10 +94,10 @@ public static class Triangulation
             points3D.Add(p);
         }
 
-        // 4. Run Triangulation
-        List<int> indices = DelaunayTriangulate(points2D);
+        // 5. Run Triangulation with dynamic index offsets
+        List<int> indices = DelaunayTriangulate(points2D, boundaryCount, superStart, userStart);
 
-        // 5. Convert indices to 3D triangles
+        // 6. Convert indices to 3D triangles, ignoring super triangle vertices
         List<Triangle> tris = new List<Triangle>();
         for (int i = 0; i < indices.Count; i += 3)
         {
@@ -94,10 +105,9 @@ public static class Triangulation
             int b = indices[i + 1];
             int c = indices[i + 2];
 
-            // Ignore any triangles that use the super triangle dummy points
-            if (a >= 16 && a <= 18) continue;
-            if (b >= 16 && b <= 18) continue;
-            if (c >= 16 && c <= 18) continue;
+            if (a >= superStart && a <= superStart + 2) continue;
+            if (b >= superStart && b <= superStart + 2) continue;
+            if (c >= superStart && c <= superStart + 2) continue;
 
             tris.Add(new Triangle(points3D[a], points3D[b], points3D[c]));
         }
@@ -105,28 +115,65 @@ public static class Triangulation
         return tris;
     }
 
+    /// <summary>
+    /// Picks the nearest maxBoundaryPoints from allBoundary relative to nearestTo.
+    /// If maxBoundaryPoints >= 16 or nearestTo is null, returns all 16.
+    /// </summary>
+    private static List<Vector3> SelectBoundaryPoints(Vector3[] allBoundary,
+        int maxBoundaryPoints, Vector3? nearestTo)
+    {
+        List<Vector3> result = new List<Vector3>();
+
+        if (maxBoundaryPoints >= 16 || nearestTo == null)
+        {
+            for (int i = 0; i < allBoundary.Length; i++)
+                result.Add(allBoundary[i]);
+            return result;
+        }
+
+        // Sort boundary indices by squared distance to the reference point
+        Vector3 refPoint = nearestTo.Value;
+        List<int> sortedIndices = new List<int>();
+        for (int i = 0; i < allBoundary.Length; i++)
+            sortedIndices.Add(i);
+
+        sortedIndices.Sort((a, b) =>
+            Vector3.SqrMagnitude(allBoundary[a] - refPoint).CompareTo(
+            Vector3.SqrMagnitude(allBoundary[b] - refPoint)));
+
+        // Pick the closest N
+        int count = Mathf.Min(maxBoundaryPoints, sortedIndices.Count);
+        for (int i = 0; i < count; i++)
+        {
+            result.Add(allBoundary[sortedIndices[i]]);
+        }
+
+        return result;
+    }
+
     // --- Internal Geometric Algorithms ---
 
-    private static List<int> DelaunayTriangulate(List<Vector2> points)
+    private static List<int> DelaunayTriangulate(List<Vector2> points,
+        int boundaryCount, int superStart, int userStart)
     {
         if (points.Count < 3) return new List<int>();
 
         List<Tri2D> triangles = new List<Tri2D>();
 
-        // Add super triangle (indices 16, 17, 18)
-        triangles.Add(new Tri2D(16, 17, 18, points));
+        // Add super triangle using the dynamically offset indices
+        triangles.Add(new Tri2D(superStart, superStart + 1, superStart + 2, points));
 
-        // Delaunay triangulate the 16 boundary points
-        for (int pIdx = 0; pIdx < 16; pIdx++)
+        // Delaunay triangulate the boundary points (indices 0 .. boundaryCount-1)
+        for (int pIdx = 0; pIdx < boundaryCount; pIdx++)
         {
             InsertPointDelaunay(pIdx, triangles, points);
         }
 
         // Remove super triangle
-        triangles.RemoveAll(t => t.A >= 16 || t.B >= 16 || t.C >= 16);
+        triangles.RemoveAll(t => t.A >= superStart || t.B >= superStart || t.C >= superStart);
 
-        // Insert user clicked points (indices 19 to count-1) using Standard Delaunay
-        for (int pIdx = 19; pIdx < points.Count; pIdx++)
+        // Insert user clicked points (starting from userStart)
+        for (int pIdx = userStart; pIdx < points.Count; pIdx++)
         {
             InsertPointDelaunay(pIdx, triangles, points);
         }
@@ -197,7 +244,7 @@ public static class Triangulation
     private static Vector3[] GetBoundaryPoints(Transform board)
     {
         float size = 5f;
-        int segmentsPerEdge = 4; // 16 total points
+        int segmentsPerEdge = 4; // 16 total points (4 corners + 12 midpoints)
 
         Vector3 c0 = board.TransformPoint(new Vector3(-size, 0, -size));
         Vector3 c1 = board.TransformPoint(new Vector3(size, 0, -size));
