@@ -5,7 +5,7 @@ public static class LineRendererDrawer
 {
     static List<GameObject> lines = new List<GameObject>();
 
-    const int depthLayers = 8;      // Number of repeated depth copies
+    const int depthLayers = 10;      // Number of repeated depth copies
     const float depthStep = 0.1f;  // Vertical spacing between copies
 
     public static void Draw(List<Triangle> tris, Material mat, Transform board)
