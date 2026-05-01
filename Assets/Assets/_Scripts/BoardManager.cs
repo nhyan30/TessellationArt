@@ -5,13 +5,15 @@ public class BoardManager : MonoBehaviour
 {
     public Camera cam;
     public Material lineMaterial;
+    public MeshLineDrawer meshDrawer;
 
     private List<Vector3> points = new List<Vector3>();
     private List<Triangle> triangles = new List<Triangle>();
 
     void Start()
     {
-        LineRendererDrawer.DrawBoardOutline(transform, lineMaterial);
+        //LineRendererDrawer.DrawBoardOutline(transform, lineMaterial);
+        meshDrawer.Draw(new List<Triangle>(), transform);
     }
 
     void Update()
@@ -56,6 +58,7 @@ public class BoardManager : MonoBehaviour
             triangles = Triangulation.Generate(points, transform, 16, null);
         }
 
-        LineRendererDrawer.Draw(triangles, lineMaterial, transform);
+        //LineRendererDrawer.Draw(triangles, lineMaterial, transform);
+        meshDrawer.Draw(triangles, transform);
     }
 }
