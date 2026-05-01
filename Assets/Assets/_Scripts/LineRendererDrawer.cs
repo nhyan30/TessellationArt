@@ -128,7 +128,7 @@ public static class LineRendererDrawer
         lr.endWidth = width;
         lr.positionCount = 2;
         lr.useWorldSpace = true;
-        lr.numCapVertices = 8;
+        lr.numCapVertices = 0;
 
         lr.SetPosition(0, a + Vector3.up * 0.02f);
         lr.SetPosition(1, b + Vector3.up * 0.02f);
