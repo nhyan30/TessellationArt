@@ -34,7 +34,9 @@ public static class LineRendererDrawer
         // --- Outline depth copies ---
         for (int d = 1; d <= 2; d++)
         {
-            float fade = 1f - (float)d / 3f;
+            float t = (float)d / 3f;
+            float fade = Mathf.Pow(1f - t, 2f); // Exponential fade
+
             Vector3 depthOff = board.TransformDirection(new Vector3(0, -d * 0.07f, 0));
             for (int i = 0; i < c.Length; i++)
             {
@@ -75,7 +77,10 @@ public static class LineRendererDrawer
         for (int i = 1; i <= depthLayers; i++)
         {
             float d = i * depthStep;
-            float fade = 1f - (float)i / (depthLayers + 1);   // Fades from 0.87 down to 0.12
+
+            // Exponential falloff: makes the last layers almost completely invisible
+            float t = (float)i / depthLayers;
+            float fade = Mathf.Pow(1f - t, 2.0f);
 
             // Only translate downwards, NO scaling
             Vector3 depthOffset = board.TransformDirection(new Vector3(0, -d, 0));
