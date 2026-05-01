@@ -5,9 +5,8 @@ public static class LineRendererDrawer
 {
     static List<GameObject> lines = new List<GameObject>();
 
-    const int depthLayers = 7;      // Number of repeated depth copies
-    const float depthStep = .08f;  // Vertical spacing between copies
-    const float scaleStep = .025f; // Shrink per layer
+    const int depthLayers = 8;      // Number of repeated depth copies
+    const float depthStep = 0.1f;  // Vertical spacing between copies
 
     public static void Draw(List<Triangle> tris, Material mat, Transform board)
     {
@@ -65,8 +64,6 @@ public static class LineRendererDrawer
 
     static void DrawExtrudedTriangle(Triangle tri, Material mat, Transform board)
     {
-        Vector3 center = (tri.a + tri.b + tri.c) / 3f;
-
         // ── FRONT FACE (bright + glow) ─────────────────────
         DrawGlowEdge(tri.a, tri.b, mat, 0.05f);
         DrawGlowEdge(tri.b, tri.c, mat, 0.05f);
@@ -78,16 +75,18 @@ public static class LineRendererDrawer
         for (int i = 1; i <= depthLayers; i++)
         {
             float d = i * depthStep;
-            float s = 1f - (i * scaleStep);
-            float fade = 1f - (float)i / (depthLayers + 1);   // 0.83 → 0.17
+            float fade = 1f - (float)i / (depthLayers + 1);   // Fades from 0.87 down to 0.12
 
+            // Only translate downwards, NO scaling
             Vector3 depthOffset = board.TransformDirection(new Vector3(0, -d, 0));
 
-            Vector3 A = center + (tri.a - center) * s + depthOffset;
-            Vector3 B = center + (tri.b - center) * s + depthOffset;
-            Vector3 C = center + (tri.c - center) * s + depthOffset;
+            // All copies use the exact same original vertex positions, just offset
+            Vector3 A = tri.a + depthOffset;
+            Vector3 B = tri.b + depthOffset;
+            Vector3 C = tri.c + depthOffset;
 
-            float w = Mathf.Lerp(0.03f, 0.015f, (float)i / depthLayers);
+            // Constant width for all depth lines so they match the front face size
+            float w = 0.03f;
 
             DrawEdge(A, B, mat, w, fade);
             DrawEdge(B, C, mat, w, fade);
