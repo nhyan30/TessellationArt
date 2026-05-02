@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 
 public class BoardManager : MonoBehaviour
@@ -7,12 +7,22 @@ public class BoardManager : MonoBehaviour
     public Material lineMaterial;
     public MeshLineDrawer meshDrawer;
 
+    [Header("Audio")]
+    public AudioClip hitSound; // Assign your sound effect here in the Inspector
+
+    private AudioSource audioSource;
     private List<Vector3> points = new List<Vector3>();
     private List<Triangle> triangles = new List<Triangle>();
 
     void Start()
     {
-        //LineRendererDrawer.DrawBoardOutline(transform, lineMaterial);
+        // Get or add an AudioSource component automatically
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null)
+        {
+            audioSource = gameObject.AddComponent<AudioSource>();
+        }
+
         meshDrawer.Draw(new List<Triangle>(), transform);
     }
 
@@ -41,7 +51,6 @@ public class BoardManager : MonoBehaviour
 
         if (points.Count == 1)
         {
-            // FIRST HIT: connect only to the 6 nearest boundary anchors
             triangles = Triangulation.Generate(points, transform, 8, points[0]);
         }
         else if (points.Count == 2)
@@ -54,11 +63,16 @@ public class BoardManager : MonoBehaviour
         }
         else
         {
-            // SECOND HIT onwards: connect to all 16 boundary anchors
             triangles = Triangulation.Generate(points, transform, 16, null);
         }
 
-        //LineRendererDrawer.Draw(triangles, lineMaterial, transform);
         meshDrawer.Draw(triangles, transform);
+
+        // Play the hit sound effect
+        if (hitSound != null)
+        {
+            audioSource.pitch = Random.Range(0.95f, 1.05f); // 🔥 variation
+            audioSource.PlayOneShot(hitSound);
+        }
     }
 }
